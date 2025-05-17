@@ -12,7 +12,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // Global middleware
+        // $middleware->append([...]);
+        
+        // Register named middleware aliases (this is the important part)
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\UserMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
