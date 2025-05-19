@@ -81,6 +81,12 @@ class AuthController extends Controller
             ]);
         }
 
+        // Revoke all existing tokens for this user (single session enforcement)
+        $user->tokens()->delete();
+        
+        // Delete all existing refresh tokens for this user
+        RefreshToken::where('user_id', $user->id)->delete();
+        
         // Generate access token
         $accessToken = $user->createToken('mobile-app')->plainTextToken;
         
@@ -151,8 +157,8 @@ class AuthController extends Controller
         // Revoke all tokens
         $user->tokens()->delete();
         
-        // Delete used refresh token
-        $refreshToken->delete();
+        // Delete ALL refresh tokens for this user (not just the used one)
+        RefreshToken::where('user_id', $user->id)->delete();
         
         // Create new access token
         $accessToken = $user->createToken('mobile-app')->plainTextToken;
@@ -190,16 +196,16 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        // Delete current access token
-        $request->user()->currentAccessToken()->delete();
+        // Get user before deleting tokens
+        $user = $request->user();
         
-        // Delete refresh token if provided
-        if ($request->has('refresh_token')) {
-            RefreshToken::where('token', hash('sha256', $request->refresh_token))->delete();
-        }
+        // Delete all access tokens for the user
+        $user->tokens()->delete();
+        
+        // Delete all refresh tokens for the user
+        RefreshToken::where('user_id', $user->id)->delete();
         
         // Clear token in user record (keeping original functionality)
-        $user = $request->user();
         $user->token = null;
         $user->save();
         
