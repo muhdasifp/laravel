@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\RefreshToken; // Added RefreshToken model
 use App\Traits\ApiResponseHandler;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str; // Added Str facade
 use RuntimeException;
 
 class AuthController extends Controller
@@ -79,20 +81,104 @@ class AuthController extends Controller
             ]);
         }
 
-        // Generate token and return success response
-        $token = $user->createToken('mobile-app')->plainTextToken;
+        // Generate access token
+        $accessToken = $user->createToken('mobile-app')->plainTextToken;
         
-        // Store token in user record (optional)
-        $user->token = $token;
+        // Generate refresh token
+        $refreshToken = Str::random(60);
+        
+        // Store refresh token in database
+        RefreshToken::create([
+            'user_id' => $user->id,
+            'token' => hash('sha256', $refreshToken),
+            'expires_at' => now()->addDays(30),
+        ]);
+        
+        // Store access token in user record (keeping original functionality)
+        $user->token = $accessToken;
         $user->save();
         
         return $this->handleResponse([
             'type' => 'success',
             'data' => [
                 // 'user' => $user,
-                'token' => $token
+                'access_token' => $accessToken,
+                'refresh_token' => $refreshToken,
+                'token_type' => 'Bearer'
             ],
             'message' => 'Login successful'
+        ]);
+    }
+
+    /**
+     * Refresh access token using refresh token.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function refresh(Request $request)
+    {
+        // Validate request
+        $validator = Validator::make($request->all(), [
+            'refresh_token' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->handleResponse([
+                'type' => 'validation_error',
+                'data' => $validator->errors(),
+                'message' => 'Validation failed'
+            ]);
+        }
+        
+        // Find and validate refresh token
+        $refreshToken = RefreshToken::where('token', hash('sha256', $request->refresh_token))
+            ->where('expires_at', '>', now())
+            ->first();
+            
+        if (!$refreshToken) {
+            return $this->handleResponse([
+                'type' => 'unauthenticated',
+                'status' => 401,
+                'data' => ['refresh_token' => ['Invalid or expired refresh token.']],
+                'message' => 'Invalid or expired refresh token'
+            ]);
+        }
+        
+        // Get user
+        $user = User::find($refreshToken->user_id);
+        
+        // Revoke all tokens
+        $user->tokens()->delete();
+        
+        // Delete used refresh token
+        $refreshToken->delete();
+        
+        // Create new access token
+        $accessToken = $user->createToken('mobile-app')->plainTextToken;
+        
+        // Create new refresh token
+        $newRefreshToken = Str::random(60);
+        
+        // Store new refresh token
+        RefreshToken::create([
+            'user_id' => $user->id,
+            'token' => hash('sha256', $newRefreshToken),
+            'expires_at' => now()->addDays(30),
+        ]);
+        
+        // Store token in user record (keeping original functionality)
+        $user->token = $accessToken;
+        $user->save();
+        
+        return $this->handleResponse([
+            'type' => 'success',
+            'data' => [
+                'access_token' => $accessToken,
+                'refresh_token' => $newRefreshToken,
+                'token_type' => 'Bearer'
+            ],
+            'message' => 'Token refreshed successfully'
         ]);
     }
 
@@ -107,7 +193,12 @@ class AuthController extends Controller
         // Delete current access token
         $request->user()->currentAccessToken()->delete();
         
-        // Clear token in user record (optional)
+        // Delete refresh token if provided
+        if ($request->has('refresh_token')) {
+            RefreshToken::where('token', hash('sha256', $request->refresh_token))->delete();
+        }
+        
+        // Clear token in user record (keeping original functionality)
         $user = $request->user();
         $user->token = null;
         $user->save();

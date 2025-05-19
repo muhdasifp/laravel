@@ -14,12 +14,14 @@ use App\Http\Middleware\UserMiddleware;
 
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/refresh', [AuthController::class, 'refresh']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
 
     // Logout
     Route::post('/logout', [AuthController::class, 'logout']);
+
 
     // Profile management
     Route::prefix('profile')->group(function () {
