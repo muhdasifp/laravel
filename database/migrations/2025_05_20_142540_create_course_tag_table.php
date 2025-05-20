@@ -13,12 +13,13 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('categories', function (Blueprint $table) {
+        Schema::create('course_tag', function (Blueprint $table) {
             $table->id();
-            $table->string('category_name');
-            $table->string('image')->nullable();
-            $table->boolean('is_svg')->default(false);
+            $table->foreignId('course_id')->constrained()->onDelete('cascade');
+            $table->foreignId('tag_id')->constrained()->onDelete('cascade');
             $table->timestamps();
+            
+            $table->unique(['course_id', 'tag_id']);
         });
     }
 
@@ -29,6 +30,6 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('categories');
+        Schema::dropIfExists('course_tag');
     }
 };
