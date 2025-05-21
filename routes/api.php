@@ -16,7 +16,7 @@ use App\Http\Controllers\CategoryController;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
-Route::post('/refresh', [AuthController::class, 'refresh']);
+//Route::post('/refresh', [AuthController::class, 'refresh']);
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Logout

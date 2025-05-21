@@ -17,96 +17,78 @@ use RuntimeException;
 class AuthController extends Controller
 {
     use ApiResponseHandler;
-    
-    /**
-     * Login user and send OTP to email.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
-    public function login(Request $request)
-    {
-        // Validate request
-        $validator = Validator::make($request->all(), [
-            'email' => 'required',
-            'password' => 'required',
-        ]);
+//login     
+public function login(Request $request)
+{
+    // Validate request
+    $validator = Validator::make($request->all(), [
+        'email' => 'required',
+        'password' => 'required',
+    ]);
 
-        if ($validator->fails()) {
-            return $this->handleResponse([
-                'type' => 'validation_error',
-                'data' => $validator->errors(),
-                'message' => 'Validation failed'
-            ]);
-        }
-
-        // Find user by email and active status
-        $user = User::where('email', $request->email)
-                    ->where('status', User::STATUS_ACTIVE)
-                    ->first();
-
-        // If user not found or inactive
-        if (!$user) {
-            return $this->handleResponse([
-                'type' => 'unauthenticated',
-                'status' => 401,
-                'data' => ['email' => ['The provided credentials are incorrect.']],
-                'message' => 'The provided credentials are incorrect.'
-            ]);
-        }
-
-        // Check password - use direct comparison instead of Hash::check
-        $passwordCorrect = false;
-        
-        // First try: Use legacy password verification (md5, sha1 or plain text)
-        if ($this->verifyLegacyPassword($request->password, $user->password)) {
-            $passwordCorrect = true;
-        } else {
-            // Second try: Use Bcrypt check in case some passwords are already migrated
-            try {
-                $passwordCorrect = Hash::check($request->password, $user->password);
-            } catch (RuntimeException $e) {
-                // Do nothing here - already tried legacy verification
-            }
-        }
-
-        // If password is incorrect
-        if (!$passwordCorrect) {
-            return $this->handleResponse([
-                'type' => 'unauthenticated',
-                'status' => 401,
-                'data' => ['email' => ['The provided credentials are incorrect.']],
-                'message' => 'The provided credentials are incorrect.'
-            ]);
-        }
-
-        // Generate and send OTP
-        $otp = $this->generateOtp();
-        
-        // Delete any existing OTPs for this user
-        OtpVerification::where('user_id', $user->id)->delete();
-        
-        // Create new OTP record
-        OtpVerification::create([
-            'user_id' => $user->id,
-            'otp' => $otp,
-            'verified' => false,
-            'expires_at' => now()->addMinutes(10), // OTP valid for 10 minutes
-        ]);
-        
-        // Send OTP email
-        $user->notify(new LoginOtpNotification($otp));
-        
+    if ($validator->fails()) {
         return $this->handleResponse([
-            'type' => 'success',
-            'data' => [
-                'user_id' => $user->id,
-                'message' => 'OTP has been sent to your email'
-            ],
-            'message' => 'Please verify your email with the OTP sent'
+            'type' => 'validation_error',
+            'data' => $validator->errors(),
+            'message' => 'Validation failed'
         ]);
     }
+
+    // Find user by email and active status
+    $user = User::where('email', $request->email)
+                ->where('status', User::STATUS_ACTIVE)
+                ->first();
+
+    // If user not found or inactive
+    if (!$user) {
+        return $this->handleResponse([
+            'type' => 'unauthenticated',
+            'status' => 401,
+            'data' => ['email' => ['The provided credentials are incorrect.']],
+            'message' => 'The provided credentials are incorrect.'
+        ]);
+    }
+
+    // Check password - use direct comparison instead of Hash::check
+    $passwordCorrect = false;
     
+    // First try: Use legacy password verification (md5, sha1 or plain text)
+    if ($this->verifyLegacyPassword($request->password, $user->password)) {
+        $passwordCorrect = true;
+    } else {
+        // Second try: Use Bcrypt check in case some passwords are already migrated
+        try {
+            $passwordCorrect = Hash::check($request->password, $user->password);
+        } catch (RuntimeException $e) {
+            // Do nothing here - already tried legacy verification
+        }
+    }
+
+    // If password is incorrect
+    if (!$passwordCorrect) {
+        return $this->handleResponse([
+            'type' => 'unauthenticated',
+            'status' => 401,
+            'data' => ['email' => ['The provided credentials are incorrect.']],
+            'message' => 'The provided credentials are incorrect.'
+        ]);
+    }
+
+    // Remove existing tokens if any
+    $user->tokens()->delete();
+    
+    // Create new token
+    $token = $user->createToken('auth_token')->plainTextToken;
+    
+    return $this->handleResponse([
+        'type' => 'success',
+        'data' => [
+            'user' => $user,
+            'token' => $token
+        ],
+        'message' => 'Login successful'
+    ]);
+}
     /**
      * Verify OTP and issue tokens.
      *
