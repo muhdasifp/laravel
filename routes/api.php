@@ -14,6 +14,7 @@ use App\Http\Controllers\CategoryController;
 */
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/send-otp', [AuthController::class, 'sendOtp']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 //Route::post('/refresh', [AuthController::class, 'refresh']);

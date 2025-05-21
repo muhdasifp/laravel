@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\RefreshToken;
 use App\Models\OtpVerification;
-use App\Notifications\LoginOtpNotification;
+use App\Notifications\OtpNotification;
 use App\Traits\ApiResponseHandler;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -89,6 +89,73 @@ public function login(Request $request)
         'message' => 'Login successful'
     ]);
 }
+/**
+ * Send OTP to user
+ * 
+ * @param Request $request
+ * @return \Illuminate\Http\JsonResponse
+ */
+public function sendOtp(Request $request)
+{
+    // Validate request
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email',
+    ]);
+
+    if ($validator->fails()) {
+        return $this->handleResponse([
+            'type' => 'validation_error',
+            'data' => $validator->errors(),
+            'message' => 'Validation failed'
+        ]);
+    }
+
+    // Find user by email and active status
+    $user = User::where('email', $request->email)
+                ->where('status', User::STATUS_ACTIVE)
+                ->first();
+
+    // If user not found or inactive
+    if (!$user) {
+        return $this->handleResponse([
+            'type' => 'not_found',
+            'status' => 404,
+            'message' => 'User not found or inactive'
+        ]);
+    }
+
+    // Generate OTP
+    $otp = $this->generateOtp(); // Assuming this method exists to generate a random OTP
+    
+    // Delete any existing OTPs for this user
+    OtpVerification::where('user_id', $user->id)->delete();
+    
+    // Create new OTP record
+    OtpVerification::create([
+        'user_id' => $user->id,
+        'otp' => $otp,
+        'verified' => false,
+        'expires_at' => now()->addMinutes(10), // OTP valid for 10 minutes
+    ]);
+    
+    // Send OTP email
+    $user->notify(new OtpNotification($otp));
+    
+    return $this->handleResponse([
+        'type' => 'success',
+        'data' => [
+            'user_id' => $user->id,
+        ],
+        'message' => 'OTP has been sent to your email'
+    ]);
+}
+
+/**
+ * Generate a random OTP
+ * 
+ * @return string
+ */
+
     /**
      * Verify OTP and issue tokens.
      *
@@ -221,7 +288,7 @@ public function login(Request $request)
         ]);
         
         // Send OTP email
-        $user->notify(new LoginOtpNotification($otp));
+        $user->notify(new  OtpNotification($otp));
         
         return $this->handleResponse([
             'type' => 'success',
